@@ -13,3 +13,6 @@
 [submodule "src/ThirdParty/libqb"]
 	path = src/ThirdParty/libqb
 	url = https://github.com/ClusterLabs/libqb
+[submodule "src/ThirdParty/pgl"]
+	path = src/ThirdParty/pgl
+	url = https://github.com/dkopecek/pgl

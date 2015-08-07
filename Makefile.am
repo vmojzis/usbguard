@@ -8,6 +8,10 @@ if BUILD_BUNDLED_LIBSODIUM
 SUBDIRS += src/ThirdParty/libsodium
 endif
 
+if BUILD_BUNDLED_PGL
+SUBDIRS += src/ThirdParty/pgl
+endif
+
 ACLOCAL_AMFLAGS= -I m4
 EXTRA_DIST=\
 	LICENSE
@@ -135,7 +139,8 @@ usbguard_daemon_CPPFLAGS=\
 	@json_CFLAGS@ \
 	@seccomp_CFLAGS@ \
 	@libcapng_CFLAGS@ \
-	@qb_CFLAGS@
+	@qb_CFLAGS@ \
+	@pgl_CFLAGS@
 
 usbguard_daemon_LDADD=\
 	$(top_builddir)/libusbguard.la \
@@ -143,7 +148,8 @@ usbguard_daemon_LDADD=\
 	@json_LIBS@ \
 	@seccomp_LIBS@ \
 	@libcapng_LIBS@ \
-	@qb_LIBS@
+	@qb_LIBS@ \
+	@pgl_LIBS@
 
 EXTRA_DIST +=\
 	README.md \
@@ -151,7 +157,8 @@ EXTRA_DIST +=\
 	src/ThirdParty/json/src/json.hpp \
 	src/ThirdParty/Catch \
 	src/ThirdParty/libqb \
-	src/ThirdParty/libsodium
+	src/ThirdParty/libsodium \
+	src/ThirdParty/pgl
 
 bin_PROGRAMS=\
 	usbguard-generate-policy

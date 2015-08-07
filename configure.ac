@@ -107,6 +107,26 @@ else
 fi
 
 #
+# pgl library
+#
+AC_ARG_WITH([bundled-pgl], AS_HELP_STRING([--with-bundled-pgl], [Build using the bundled pgl library]))
+if test "x$with_bundled_pgl" = "xyes"; then
+   pgl_LIBS="\$(top_builddir)/src/ThirdParty/pgl/libpgl.la"
+   pgl_CFLAGS="-I\$(top_builddir)/src/ThirdParty/pgl/src/Library"
+   AC_SUBST([pgl_LIBS])
+   AC_SUBST([pgl_CFLAGS])
+   build_bundled_pgl=yes
+   pgl_summary="bundled; $pgl_LIBS"
+else
+   PKG_CHECK_MODULES([pgl], [pgl >= 0],
+   [build_bundled_pgl=no
+    pgl_summary="system-wide; $pgl_LIBS"]
+   ,
+   [AC_MSG_FAILURE([System-wide pgl development files not found! Re-run with the --with-bundled-pgl option or install pgl development files.])]
+   )
+fi
+
+#
 # Check for optional libraries
 #
 PKG_CHECK_MODULES([seccomp], [libseccomp >= 2.0.0],
@@ -231,8 +251,19 @@ if test "$build_bundled_libsodium" = "yes"; then
    ac_configure_args="$ac_configure_args_pre"
 fi
 
+if test "$build_bundled_pgl" = "yes"; then
+   ac_configure_args_pre="$ac_configure_args"
+   ac_configure_args_post="$ac_configure_args --disable-shared --enable-static --with-pic"
+   ac_configure_args="$ac_configure_args_post"
+   AC_CONFIG_COMMANDS_PRE([ac_configure_args="$ac_configure_args_pre"])
+   AC_CONFIG_COMMANDS_POST([ac_configure_args="$ac_configure_args_post"])
+   AC_CONFIG_SUBDIRS([src/ThirdParty/pgl])
+   ac_configure_args="$ac_configure_args_pre"
+fi
+
 AM_CONDITIONAL([BUILD_BUNDLED_LIBSODIUM], [test "$build_bundled_libsodium" = "yes"])
 AM_CONDITIONAL([BUILD_BUNDLED_LIBQB], [test "$build_bundled_libqb" = "yes"])
+AM_CONDITIONAL([BUILD_BUNDLED_PGL], [test "$build_bundled_pgl" = "yes"])
 
 AC_CONFIG_FILES([Makefile libusbguard.pc src/Tests/Makefile])
 AC_OUTPUT
@@ -250,6 +281,7 @@ echo " libseccomp: $libseccomp_summary"
 echo "  libcap-ng: $libcap_ng_summary"
 echo "       json: $json_summary"
 echo "     spdlog: $spdlog_summary"
+echo "        pgl: $pgl_summary"
 echo
 echo "## Compilation Flags"
 echo
