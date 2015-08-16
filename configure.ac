@@ -112,7 +112,7 @@ fi
 AC_ARG_WITH([bundled-pgl], AS_HELP_STRING([--with-bundled-pgl], [Build using the bundled pgl library]))
 if test "x$with_bundled_pgl" = "xyes"; then
    pgl_LIBS="\$(top_builddir)/src/ThirdParty/pgl/libpgl.la"
-   pgl_CFLAGS="-I\$(top_builddir)/src/ThirdParty/pgl/src/Library"
+   pgl_CFLAGS="-I\$(top_srcdir)/src/ThirdParty/pgl/src/Library"
    AC_SUBST([pgl_LIBS])
    AC_SUBST([pgl_CFLAGS])
    build_bundled_pgl=yes

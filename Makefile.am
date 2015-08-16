@@ -122,7 +122,8 @@ EXTRA_DIST +=\
 	src/Library/RuleParser/README.md
 
 sbin_PROGRAMS=\
-	usbguard-daemon
+	usbguard-daemon \
+	usbguard-daemon-pgl
 
 usbguard_daemon_SOURCES=\
 	src/Daemon/Daemon.cpp \
@@ -143,6 +144,41 @@ usbguard_daemon_CPPFLAGS=\
 	@pgl_CFLAGS@
 
 usbguard_daemon_LDADD=\
+	$(top_builddir)/libusbguard.la \
+	@spdlog_LIBS@ \
+	@json_LIBS@ \
+	@seccomp_LIBS@ \
+	@libcapng_LIBS@ \
+	@qb_LIBS@ \
+	@pgl_LIBS@
+
+usbguard_daemon_pgl_SOURCES=\
+	src/Daemon/main-pgl.cpp \
+	src/Daemon/ConfigProcess/ConfigProcess.cpp \
+	src/Daemon/ConfigProcess/ConfigProcess.hpp \
+	src/Daemon/IPCServerProcess/IPCServerProcess.cpp \
+	src/Daemon/IPCServerProcess/IPCServerProcess.hpp \
+	src/Daemon/PolicyProcess/PolicyProcess.cpp \
+	src/Daemon/PolicyProcess/PolicyProcess.hpp \
+	src/Daemon/RuleSysIOProcess/RuleSysIOProcess.cpp \
+	src/Daemon/RuleSysIOProcess/RuleSysIOProcess.hpp \
+	src/Daemon/USBControlProcess/USBControlProcess.cpp \
+	src/Daemon/USBControlProcess/USBControlProcess.hpp \
+	src/Daemon/USBEventsProcess/USBEventsProcess.cpp \
+	src/Daemon/USBEventsProcess/USBEventsProcess.hpp \
+	src/Daemon/USBMonitorProcess/USBMonitorProcess.cpp \
+	src/Daemon/USBMonitorProcess/USBMonitorProcess.hpp
+
+usbguard_daemon_pgl_CPPFLAGS=\
+	$(AM_CPPFLAGS) \
+	@spdlog_CFLAGS@ \
+	@json_CFLAGS@ \
+	@seccomp_CFLAGS@ \
+	@libcapng_CFLAGS@ \
+	@qb_CFLAGS@ \
+	@pgl_CFLAGS@
+
+usbguard_daemon_pgl_LDADD=\
 	$(top_builddir)/libusbguard.la \
 	@spdlog_LIBS@ \
 	@json_LIBS@ \
