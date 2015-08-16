@@ -53,7 +53,7 @@ namespace usbguard
     return d_pointer->getSettingValue(name);
   }
 
-  void ConfigFile::setSettingValue(const String& name, String& value)
+  void ConfigFile::setSettingValue(const String& name, const String& value)
   {
     d_pointer->setSettingValue(name, value);
     return;

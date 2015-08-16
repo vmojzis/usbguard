@@ -31,7 +31,7 @@ namespace usbguard {
     void write();
     void close();
 
-    void setSettingValue(const String& name, String& value);
+    void setSettingValue(const String& name, const String& value);
     bool hasSettingValue(const String& name) const;
     const String& getSettingValue(const String& name) const;
 

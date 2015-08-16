@@ -92,7 +92,7 @@ namespace usbguard
     return setting.value;
   }
 
-  void ConfigFilePrivate::setSettingValue(const String& name, String& value)
+  void ConfigFilePrivate::setSettingValue(const String& name, const String& value)
   {
     NVPair& setting = _settings.at(name);
     setting.value = value;
