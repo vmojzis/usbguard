@@ -132,15 +132,4 @@ namespace usbguard
     ReasonCode _code;
     mutable uint64_t _request_id;
   };
-
-  class DLL_PUBLIC IPC : public Interface
-  {
-  public:
-    static uint64_t uniqueID(void)
-    {
-      static std::atomic<uint64_t> id(1);
-      return id++;
-    }
-  };
-
 } /* namespace usbguard */

@@ -117,8 +117,9 @@ lib_LTLIBRARIES=\
 libusbguard_la_CPPFLAGS=\
 	-I$(top_srcdir)/src \
 	-I$(top_srcdir)/src/Library \
+	-I$(top_builddir)/src/Library/IPC \
 	@qb_CFLAGS@ \
-	@json_CFLAGS@ \
+	@protobuf_CFLAGS@ \
 	@spdlog_CFLAGS@ \
 	@udev_CFLAGS@ \
 	@crypto_CFLAGS@ \
@@ -131,25 +132,44 @@ libusbguard_la_LDFLAGS=\
 libusbguard_la_LIBADD=\
 	@qb_LIBS@ \
 	@spdlog_LIBS@ \
-	@json_LIBS@ \
+	@protobuf_LIBS@ \
 	@udev_LIBS@ \
 	@crypto_LIBS@ \
 	@pegtl_LIBS@
 
+EXTRA_DIST+=\
+	src/Library/Devices.proto \
+	src/Library/Exception.proto \
+	src/Library/Message.proto \
+	src/Library/Policy.proto \
+	src/Library/Rule.proto
+
 libusbguard_la_SOURCES=\
 	src/Common/Thread.hpp \
-	src/Common/JSON.hpp \
 	src/Common/ByteOrder.hpp \
 	src/Common/Utility.hpp \
 	src/Common/Utility.cpp \
 	src/Library/ConfigFile.cpp \
 	src/Library/ConfigFilePrivate.cpp \
 	src/Library/ConfigFilePrivate.hpp \
+	src/Library/IPC/Devices.pb.cc \
+	src/Library/IPC/Devices.pb.h \
+	src/Library/IPC/Exception.pb.cc \
+	src/Library/IPC/Exception.pb.h \
+	src/Library/IPC/Message.pb.cc \
+	src/Library/IPC/Message.pb.h \
+	src/Library/IPC/Policy.pb.cc \
+	src/Library/IPC/Policy.pb.h \
+	src/Library/IPC/Rule.pb.cc \
+	src/Library/IPC/Rule.pb.h \
+	src/Library/IPCPrivate.hpp \
+	src/Library/IPCPrivate.cpp \
 	src/Library/IPCClient.cpp \
 	src/Library/IPCClientPrivate.hpp \
 	src/Library/IPCClientPrivate.cpp \
-	src/Library/IPCPrivate.hpp \
-	src/Library/IPCPrivate.cpp \
+	src/Library/IPCServer.cpp \
+	src/Library/IPCServerPrivate.hpp \
+	src/Library/IPCServerPrivate.cpp \
 	src/Library/USB.cpp \
 	src/Library/Rule.cpp \
 	src/Library/RuleParser.cpp \
@@ -201,6 +221,7 @@ pkginclude_HEADERS=\
 	src/Library/Interface.hpp \
 	src/Library/IPC.hpp \
 	src/Library/IPCClient.hpp \
+	src/Library/IPCServer.hpp \
 	src/Library/USB.hpp \
 	src/Library/Rule.hpp \
 	src/Library/RuleSet.hpp \
@@ -211,6 +232,10 @@ pkginclude_HEADERS=\
 	src/Library/Logger.hpp \
 	src/Library/Predicates.hpp \
 	src/Library/Utility.hpp
+
+%.pb.cc %.pb.h: %.proto
+	$(MKDIR_P) $(top_builddir)/src/Library/IPC
+	@PROTOC@ --cpp_out=$(top_builddir)/src/Library/IPC --proto_path=$(top_srcdir)/src/Library/IPC "$<"
 
 sbin_PROGRAMS=\
 	usbguard-daemon
@@ -227,23 +252,18 @@ usbguard_daemon_SOURCES=\
 usbguard_daemon_CPPFLAGS=\
 	$(AM_CPPFLAGS) \
 	@spdlog_CFLAGS@ \
-	@json_CFLAGS@ \
 	@seccomp_CFLAGS@ \
-	@libcapng_CFLAGS@ \
-	@qb_CFLAGS@
+	@libcapng_CFLAGS@
 
 usbguard_daemon_LDADD=\
 	$(top_builddir)/libusbguard.la \
 	@spdlog_LIBS@ \
-	@json_LIBS@ \
 	@seccomp_LIBS@ \
-	@libcapng_LIBS@ \
-	@qb_LIBS@
+	@libcapng_LIBS@
 
 EXTRA_DIST +=\
 	README.md \
 	src/ThirdParty/spdlog \
-	src/ThirdParty/json/src/json.hpp \
 	src/ThirdParty/Catch \
 	src/ThirdParty/PEGTL
 

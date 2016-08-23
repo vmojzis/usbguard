@@ -1,0 +1,9 @@
+package usbguard.IPC;
+
+import "Message.proto";
+
+message Exception {
+  required MessageHeader header = 1;
+  required string code = 2;
+  required string hint = 3;
+}

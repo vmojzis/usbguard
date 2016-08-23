@@ -70,7 +70,6 @@ namespace usbguard
 
     try {
       _dm = DeviceManager::create(*this);
-      initIPC();
     } catch(...) {
       qb_loop_destroy(_qb_loop);
       G_qb_loop = nullptr;
@@ -90,17 +89,13 @@ namespace usbguard
     _present_device_policy = PresentDevicePolicy::Keep;
     _present_controller_policy = PresentDevicePolicy::Allow;
     _device_rules_with_port = false;
-
-    return;
   }
 
   Daemon::~Daemon()
   {
-    finiIPC();
     _config.close();
     qb_loop_destroy(_qb_loop);
     G_qb_loop = nullptr;
-    return;
   }
 
   void Daemon::loadConfiguration(const String& path)
@@ -620,38 +615,6 @@ namespace usbguard
     return QB_FALSE;
   }
 
-  int32_t Daemon::qbIPCConnectionAcceptFn(qb_ipcs_connection_t *conn, uid_t uid, gid_t gid)
-  {
-    Daemon* daemon = \
-      static_cast<Daemon*>(qb_ipcs_connection_service_context_get(conn));
-
-    const bool auth = daemon->qbIPCConnectionAllowed(uid, gid);
-
-    if (auth) {
-      logger->debug("IPC Connection accepted. "
-		    "Setting SHM permissions to uid={} gid={} mode=0660", uid, 0);
-      qb_ipcs_connection_auth_set(conn, uid, 0, 0660);
-      return 0;
-    }
-    else {
-      logger->debug("IPC Connection rejected");
-      return -1;
-    }
-  }
-
-  bool Daemon::qbIPCConnectionAllowed(uid_t uid, gid_t gid)
-  {
-    if (_ipc_dac_acl) {
-      logger->debug("Using DAC IPC ACL");
-      logger->debug("Connection request from uid={} gid={}", uid, gid);
-      return DACAuthenticateIPCConnection(uid, gid);
-    }
-    else {
-      logger->debug("IPC authentication is turned off.");
-      return true;
-    }
-  }
-
   Daemon::PresentDevicePolicy Daemon::presentDevicePolicyFromString(const String& policy_string)
   {
     const std::vector<std::pair<String,Daemon::PresentDevicePolicy> > policy_ttable = {
@@ -669,337 +632,6 @@ namespace usbguard
     }
 
     throw std::runtime_error("Invalid present device policy string");
-  }
-
-  void Daemon::qbIPCConnectionCreatedFn(qb_ipcs_connection_t *conn)
-  {
-    logger->debug("Connection created");
-  }
-
-  void Daemon::qbIPCConnectionDestroyedFn(qb_ipcs_connection_t *conn)
-  {
-    logger->debug("Connection destroyed");
-  }
-
-  int32_t Daemon::qbIPCConnectionClosedFn(qb_ipcs_connection_t *conn)
-  {
-    logger->debug("Connection closed");
-    return 0;
-  }
-
-  json Daemon::processJSON(const json& jobj)
-  {
-    logger->debug("Processing JSON object: {}", jobj.dump());
-
-    if (jobj.count("_m")) {
-      return processMethodCallJSON(jobj);
-    }
-    else {
-      throw IPCException(IPCException::ProtocolError, "Invalid message");
-    }
-    return json();
-  }
-
-  json Daemon::processMethodCallJSON(const json& jobj)
-  {
-    logger->debug("Processing method call");
-
-    json retval = {
-      { "_i", jobj.at("_i").get<uint64_t>() }
-    };
-
-    try {
-      const std::string name = jobj.at("_m").get<std::string>();
-
-      logger->debug("Method name = {}", name);
-
-      if (name == "appendRule") {
-        uint32_t val = appendRule(jobj["rule_spec"], jobj["parent_id"], jobj["timeout_sec"]);
-        retval["retval"] = val;
-      }
-      else if (name == "removeRule") {
-        removeRule(jobj["id"]);
-      }
-      else if (name == "listRules") {
-        json ruleset_json = json::array();
-        RuleSet ruleset = listRules();
-        for (auto rule : ruleset.getRules()) {
-          json rule_json = {
-            { "id", rule->getRuleID() },
-            { "rule", rule->toString() }
-          };
-          ruleset_json.push_back(rule_json);
-        }
-        retval["retval"] = ruleset_json;
-      }
-      else if (name == "allowDevice") {
-        allowDevice(jobj["id"], jobj["permanent"], jobj["timeout_sec"]);
-      }
-      else if (name == "blockDevice") {
-        blockDevice(jobj["id"], jobj["permanent"], jobj["timeout_sec"]);
-      }
-      else if (name == "rejectDevice") {
-        rejectDevice(jobj["id"], jobj["permanent"], jobj["timeout_sec"]);
-      }
-      else if (name == "listDevices") {
-        json devices_json = json::array();
-        for (auto device_rule : listDevices(jobj["query"])) {
-          json device_json = {
-            { "id", device_rule.getRuleID() },
-            { "device", device_rule.toString() }
-          };
-          devices_json.push_back(device_json);
-        }
-        retval["retval"] = devices_json;
-      }
-      else {
-        throw 0;
-      }
-      retval["_r"] = name;
-    }
-    catch(IPCException& ex) {
-      /* Set request id and forward to upper levels */
-      ex.setRequestID(jobj.at("_i").get<uint64_t>());
-      throw;
-    }
-    catch(const std::out_of_range& ex) {
-      throw IPCException(IPCException::NotFound,
-                         "Requested action depends on a resource which is not available",
-                         jobj.at("_i").get<uint64_t>());
-    }
-    catch(const std::exception& ex) {
-      logger->error("Exception: {}", ex.what());
-      throw IPCException(IPCException::InternalError, ex.what(), jobj.at("_i").get<uint64_t>());
-    }
-
-    logger->debug("Returning JSON object: {}", retval.dump());
-    return retval;
-  }
-
-  void Daemon::qbIPCSendJSON(qb_ipcs_connection_t *qb_conn, const json& jobj)
-  {
-    const std::string s = jobj.dump();
-    struct qb_ipc_response_header hdr;
-    struct iovec iov[2];
-
-    hdr.id = 0;
-    hdr.size = sizeof hdr + s.size();
-    hdr.error = 0;
-
-    iov[0].iov_base = &hdr;
-    iov[0].iov_len = sizeof hdr;
-    iov[1].iov_base = (void *)s.c_str();
-    iov[1].iov_len = s.size();
-
-    const size_t total_size = hdr.size;
-    const ssize_t rc = qb_ipcs_event_sendv(qb_conn, iov, 2);
-
-    if (rc < 0) {
-      /* FIXME: There's no client identification value in the message */
-      logger->warn("Failed to send data: {}", strerror((int)-rc));
-    }
-    else if ((size_t)rc != total_size) {
-      /* FIXME: There's no client identification value in the message */
-      logger->warn("Sent less data than expected. Expected {}, send {}.",
-		   total_size, rc);
-    }
-
-    return;
-  }
-
-  int32_t Daemon::qbIPCMessageProcessFn(qb_ipcs_connection_t *conn, void *data, size_t size)
-  {
-    if (size <= sizeof (struct qb_ipc_request_header)) {
-      logger->error("Received invalid IPC data. Disconnecting from the client.");
-      qb_ipcs_disconnect(conn);
-      return 0;
-    }
-
-    const struct qb_ipc_request_header *hdr = \
-      (const struct qb_ipc_request_header *)data;
-
-    if (size != (size_t)hdr->size) {
-      logger->error("Invalid size in IPC header. Disconnecting from the client.");
-      qb_ipcs_disconnect(conn);
-      return 0;
-    }
-    if (size > 1<<20) {
-      logger->error("Message too large. Disconnecting from the client.");
-      qb_ipcs_disconnect(conn);
-      return 0;
-    }
-
-    try {
-      const char *jdata = (char *)data + sizeof(struct qb_ipc_request_header);
-      const size_t jsize = size - sizeof(struct qb_ipc_request_header);
-      const std::string json_string((const char *)jdata, jsize);
-      const json jobj = json::parse(json_string);
-
-      logger->debug("Received JSON object: {}", jobj.dump());
-
-      Daemon* daemon = \
-        static_cast<Daemon*>(qb_ipcs_connection_service_context_get(conn));
-
-      const json retval = daemon->processJSON(jobj);
-
-      if (!retval.is_null()) {
-        qbIPCSendJSON(conn, retval);
-      }
-    }
-    catch(const IPCException& ex) {
-      logger->warn("IPCException: {}: {}", ex.codeAsString(), ex.what());
-      qbIPCSendJSON(conn, IPCPrivate::IPCExceptionToJSON(ex));
-    }
-    catch(const std::out_of_range& ex) {
-      logger->warn("Out-of-range exception caught while processing IPC message.");
-      const IPCException ipc_exception(IPCException::NotFound, "Not found");
-      qbIPCSendJSON(conn, IPCPrivate::IPCExceptionToJSON(ipc_exception));
-    }
-    catch(const std::exception& ex) {
-      logger->error("Exception: {}", ex.what());
-      logger->error("Invalid JSON object received. Disconnecting from the client.");
-      qb_ipcs_disconnect(conn);
-      /* FALLTHROUGH */
-    }
-
-    return 0;
-  }
-
-  int32_t Daemon::qbIPCJobAdd(enum qb_loop_priority p, void *data, qb_loop_job_dispatch_fn fn)
-  {
-    return qb_loop_job_add(G_qb_loop, p, data, fn);
-  }
-
-  int32_t Daemon::qbIPCDispatchAdd(enum qb_loop_priority p, int32_t fd, int32_t evts,
-				   void *data, qb_ipcs_dispatch_fn_t fn)
-  {
-    return qb_loop_poll_add(G_qb_loop, p, fd, evts, data, fn);
-  }
-
-  int32_t Daemon::qbIPCDispatchMod(enum qb_loop_priority p, int32_t fd, int32_t evts,
-				   void *data, qb_ipcs_dispatch_fn_t fn)
-  {
-    return qb_loop_poll_mod(G_qb_loop, p, fd, evts, data, fn);
-  }
-
-  int32_t Daemon::qbIPCDispatchDel(int32_t fd)
-  {
-    return qb_loop_poll_del(G_qb_loop, fd);
-  }
-
-  void Daemon::initIPC()
-  {
-    static struct qb_ipcs_service_handlers service_handlers = {
-      Daemon::qbIPCConnectionAcceptFn,
-      Daemon::qbIPCConnectionCreatedFn,
-      Daemon::qbIPCMessageProcessFn,
-      Daemon::qbIPCConnectionClosedFn,
-      Daemon::qbIPCConnectionDestroyedFn
-    };
-
-    _qb_service = qb_ipcs_create("usbguard", 0,
-				 QB_IPC_NATIVE, &service_handlers);
-
-    if (_qb_service == nullptr) {
-      throw std::runtime_error("Cannot create qb_service object");
-    }
-
-    qb_ipcs_service_context_set(_qb_service, this);
-
-    static struct qb_ipcs_poll_handlers poll_handlers = {
-      Daemon::qbIPCJobAdd,
-      Daemon::qbIPCDispatchAdd,
-      Daemon::qbIPCDispatchMod,
-      Daemon::qbIPCDispatchDel
-    };
-
-    qb_ipcs_poll_handlers_set(_qb_service, &poll_handlers);
-
-    auto rc = qb_ipcs_run(_qb_service);
-    if (rc != 0) {
-      logger->error("Cannot start the IPC server: qb_ipcs_run failed: {}", strerror((int)-rc));
-      throw std::runtime_error("IPC server error");
-    }
-
-    return;
-  }
-
-  void Daemon::finiIPC()
-  {
-    qb_ipcs_destroy(_qb_service);
-    _qb_service = nullptr;
-    return;
-  }
-
-  void Daemon::qbIPCBroadcastData(const struct iovec *iov, size_t iov_len)
-  {
-    auto qb_conn = qb_ipcs_connection_first_get(_qb_service);
-    size_t total_size = 0;
-
-    for (size_t i = 0; i < iov_len; ++i) {
-      total_size += iov[i].iov_len;
-    }
-
-    logger->debug("Sending data of total size {}.", total_size);
-
-    while (qb_conn != nullptr) {
-      /* Send the data */
-      ssize_t rc = qb_ipcs_event_sendv(qb_conn, iov, iov_len);
-
-      if (rc < 0) {
-	/* FIXME: There's no client identification value in the message */
-	logger->warn("Failed to send broadcast data to: {}", strerror((int)-rc));
-      }
-      else if ((size_t)rc != total_size) {
-	/* FIXME: There's no client identification value in the message */
-	logger->warn("Sent less data than expected to. Expected {}, send {}.",
-		     total_size, rc);
-      }
-      
-      /* Get the next connection */
-      auto qb_conn_next = qb_ipcs_connection_next_get(_qb_service, qb_conn);
-      qb_ipcs_connection_unref(qb_conn);
-      qb_conn = qb_conn_next;
-    }
-
-    return;
-  }
-
-  void Daemon::qbIPCBroadcastJSON(const json& jobj)
-  {
-    const std::string jobj_string = jobj.dump();
-    struct qb_ipc_response_header hdr;
-    struct iovec iov[2];
-
-    hdr.id = 0;
-    hdr.size = sizeof hdr + jobj_string.size();
-    hdr.error = 0;
-
-    iov[0].iov_base = &hdr;
-    iov[0].iov_len = sizeof hdr;
-    iov[1].iov_base = (void *)jobj_string.c_str();
-    iov[1].iov_len = jobj_string.size();
-
-    qbIPCBroadcastData(iov, 2);
-    return;
-  }
-
-  void Daemon::qbIPCBroadcastString(const std::string& s)
-  {
-    struct qb_ipc_response_header hdr;
-    struct iovec iov[2];
-
-    hdr.id = 0;
-    hdr.size = sizeof hdr + s.size();
-    hdr.error = 0;
-
-    iov[0].iov_base = &hdr;
-    iov[0].iov_len = sizeof hdr;
-    iov[1].iov_base = (void *)s.c_str();
-    iov[1].iov_len = s.size();
-
-    qbIPCBroadcastData(iov, 2);
-    return;
   }
 
   void Daemon::allowDevice(uint32_t id, Pointer<const Rule> matched_rule)
@@ -1134,72 +766,17 @@ namespace usbguard
     return _ruleset.getRule(rule_id);
   }
 
-  bool Daemon::DACAuthenticateIPCConnection(uid_t uid, gid_t gid)
+  void Daemon::addIPCAllowedUID(uid_t uid)
   {
-    /* Check for UID match */
-    for (auto allowed_uid : _ipc_allowed_uids) {
-      if (allowed_uid == uid) {
-	logger->debug("uid {} is an allowed uid", uid);
-	return true;
-      }
-    }
-
-    /* Translate uid to username for group member matching */
-    char pw_string_buffer[1024];
-    struct passwd pw, *pwptr = nullptr;
-    bool check_group_membership = true;
-
-    if (getpwuid_r(uid, &pw,
-		   pw_string_buffer, sizeof pw_string_buffer, &pwptr) != 0) {
-      logger->warn("Cannot lookup username for uid {}. Won't check group membership.", uid);
-      check_group_membership = false;
-    }
-
-    /* Check for GID match or group member match */
-    for (auto allowed_gid : _ipc_allowed_gids) {
-      if (allowed_gid == gid) {
-	logger->debug("gid {} is an allowed gid", gid);
-	return true;
-      }
-      else if (check_group_membership) {
-	char gr_string_buffer[3072];
-	struct group gr, *grptr = nullptr;
-
-	/* Fetch list of current group members of group with a gid == allowed_gid */
-	if (getgrgid_r(allowed_gid, &gr,
-		       gr_string_buffer, sizeof gr_string_buffer, &grptr) != 0) {
-	  logger->warn("Cannot lookup groupname for gid {}. "
-		       "Won't check group membership of uid {}", allowed_gid, uid);
-	  continue;
-	}
-
-	/* Check for username match among group members */
-	for (size_t i = 0; gr.gr_mem[i] != nullptr; ++i) {
-	  if (strcmp(pw.pw_name, gr.gr_mem[i]) == 0) {
-	    logger->debug("uid {} ({}) is a member of an allowed group with gid {} ({})",
-			  uid, pw.pw_name, allowed_gid, gr.gr_name);
-	    return true;
-	  }
-	}
-      }
-    } /* allowed gid loop */
-
-    return false;
+    /* TODO */
   }
 
-  void Daemon::DACAddAllowedUID(uid_t uid)
+  void Daemon::addIPCAllowedGID(gid_t gid)
   {
-    _ipc_allowed_uids.push_back(uid);
-    return;
+    /* TODO */
   }
 
-  void Daemon::DACAddAllowedGID(gid_t gid)
-  {
-    _ipc_allowed_gids.push_back(gid);
-    return;
-  }
-
-  void Daemon::DACAddAllowedUID(const String& username)
+  void Daemon::addIPCAllowedUID(const String& username)
   {
     char string_buffer[4096];
     struct passwd pw, *pwptr = nullptr;
@@ -1209,11 +786,10 @@ namespace usbguard
       throw std::runtime_error("cannot lookup username");
     }
 
-    DACAddAllowedUID(pw.pw_uid);
-    return;
+    addIPCAllowedUID(pw.pw_uid);
   }
 
-  void Daemon::DACAddAllowedGID(const String& groupname)
+  void Daemon::addIPCAllowedGID(const String& groupname)
   {
     char string_buffer[4096];
     struct group gr, *grptr = nullptr;
@@ -1223,8 +799,6 @@ namespace usbguard
       throw std::runtime_error("cannot lookup groupname");
     }
 
-    DACAddAllowedGID(gr.gr_gid);
-    return;
+    addIPCAllowedGID(gr.gr_gid);
   }
-
 } /* namespace usbguard */

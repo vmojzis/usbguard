@@ -18,9 +18,10 @@
 //
 #pragma once
 #include <build-config.h>
-#include "IPCClient.hpp"
-#include "Common/Thread.hpp"
 #include "Typedefs.hpp"
+#include "IPCClient.hpp"
+#include "IPCPrivate.hpp"
+#include "Common/Thread.hpp"
 #include "Common/JSON.hpp"
 
 #include <map>
@@ -42,8 +43,8 @@ namespace usbguard {
     void disconnect();
     bool isConnected() const;
     void wait();
-    void processEvent();
 
+#if 0
     uint32_t appendRule(const std::string& rule_spec, uint32_t parent_id, uint32_t timeout_sec);
     void removeRule(uint32_t id);
     const RuleSet listRules();
@@ -52,32 +53,37 @@ namespace usbguard {
     void blockDevice(uint32_t id, bool permanent, uint32_t timeout_sec);
     void rejectDevice(uint32_t id, bool permanent, uint32_t timeout_sec);
     const std::vector<Rule> listDevices(const std::string& query);
+#endif
 
   protected:
     void destruct();
     void thread();
+    void wakeup();
     void stop();
 
-    json qbIPCSendRecvJSON(const json& jval);
-    bool isExceptionJSON(const json& jval) const;
+    uint64_t acquireMessageID();
+    void releaseMessageID(uint64_t id);
 
-    const json receiveOne();
-    void processOne(const json& jobj);
-    void processExceptionJSON(const json& jobj);
-    void processSignalJSON(const json& jobj);
-    void processMethodReturnJSON(const json& jobj);
-    void processMethodCallJSON(const json& jobj);
-    void processReturnValue(const json& jobj);
+    IPC::MessagePointer qbIPCSendRecvJSON(const IPC::MessagePointer& message);
+
+    void processReceiveEvent();
+    std::string receive();
+    void process(const std::string& buffer);
+    void handleIPCPayload(uint32_t payload_type, const std::string& payload);
 
   private:
     IPCClient& _p_instance;
+
     qb_loop_t *_qb_loop;
     qb_ipcc_connection_t *_qb_conn;
-    int _qb_conn_fd;
-    int _eventfd;
-    Thread<IPCClientPrivate> _thread;
-    std::mutex _rv_map_mutex;
-    std::map<uint64_t, std::promise<json> > _rv_map;
-  };
+    int _qb_fd;
 
+    int _wakeup_fd;
+
+    std::mutex _return_mutex;
+    std::map<uint64_t, std::promise<IPC::MessagePointer>> _return_map;
+
+    Thread<IPCClientPrivate> _thread;
+    std::map<uint32_t, IPC::MessageHandler> _handlers;
+  };
 } /* namespace usbguard */

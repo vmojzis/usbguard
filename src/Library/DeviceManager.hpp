@@ -28,6 +28,12 @@ namespace usbguard {
   class DLL_PUBLIC DeviceManager
   {
   public:
+    enum class EventType {
+      Insert = 0,
+      Update = 1, /* use case: writable attribute changed externally */
+      Remove = 2,
+    };
+
     DeviceManager(DeviceManagerHooks& hooks);
     DeviceManager(const DeviceManager& rhs);
     const DeviceManager& operator=(const DeviceManager& rhs);

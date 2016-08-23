@@ -23,7 +23,7 @@
 namespace usbguard
 {
   class IPCClientPrivate;
-  class DLL_PUBLIC IPCClient : public IPC
+  class DLL_PUBLIC IPCClient : public Interface
   {
   public:
     IPCClient(bool connected = false);

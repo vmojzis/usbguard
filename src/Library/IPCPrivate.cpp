@@ -18,33 +18,47 @@
 //
 #include "IPCPrivate.hpp"
 
+#include <Devices.pb.h>
+#include <Exception.pb.h>
+#include <Policy.pb.h>
+
+#include <vector>
+#include <utility>
+
 namespace usbguard
 {
-  json IPCPrivate::IPCExceptionToJSON(const IPCException& ex)
+  static const std::vector<std::pair<uint32_t, std::string>> type_numbers = {
+    { 0x01, "listDevicesRequest" },
+    { 0x02, "listDevicesResponse" },
+    { 0x03, "applyDevicePolicyRequest" },
+    { 0x04, "applyDevicePolicyResponse" },
+    { 0x05, "DevicePresenceChangedSignal" },
+    { 0x06, "DevicePolicyChangedSignal" },
+    { 0x07, "listRulesRequest" },
+    { 0x08, "listRulesResponse" },
+    { 0x09, "appendRuleRequest" },
+    { 0x0a, "appendRuleResponse" },
+    { 0x0b, "removeRuleRequest" },
+    { 0x0c, "Exception" }
+  };
+
+  uint32_t IPC::messageTypeNameToNumber(const std::string& name)
   {
-    json object = {
-      { "_e", ex.codeAsString() },
-      { "_i", ex.requestID() },
-      { "message", ex.what() }
-    };
-    return object;
+    for (auto const& type_number : type_numbers) {
+      if (type_number.second == name) {
+        return type_number.first;
+      }
+    }
+    throw std::runtime_error("Unknown IPC message type name");
   }
 
-  bool IPCPrivate::isExceptionJSON(const json& object)
+  const std::string& IPC::messageTypeNameFromNumber(const uint32_t number)
   {
-    return (object.count("_e") == 1);
-  }
-
-  IPCException IPCPrivate::jsonToIPCException(const json& object)
-  {
-    const std::string code_string = object["_e"];
-    const IPCException::ReasonCode code = IPCException::codeFromString(code_string);
-
-    if (object.find("message") != object.end()) {
-      return IPCException(code, object["message"], object["_i"]);
+    for (auto const& type_number : type_numbers) {
+      if (type_number.first == number) {
+        return type_number.second;
+      }
     }
-    else {
-      return IPCException(code, "", object["_i"]);
-    }
+    throw std::runtime_error("Unknown IPC message type number");
   }
 } /* namespace usbguard */

@@ -1,0 +1,6 @@
+package usbguard.IPC;
+
+message MessageHeader {
+  required uint64 id = 1;
+  optional uint64 request_id = 2;
+}
